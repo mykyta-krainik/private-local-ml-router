@@ -1,36 +1,63 @@
 package com.example.privacyrouter.execution
 
 import android.content.Context
+import android.util.Log
+import com.google.mediapipe.tasks.genai.llminference.LlmInference
+import kotlinx.coroutines.suspendCancellableCoroutine
 import java.io.Closeable
+import java.io.File
+import kotlin.coroutines.resume
 
 /**
- * Path B — on-device LLM engine (primary model: Gemma 3 4B Q4 via MediaPipe LLM
- * Inference API). Placeholder — the real engine calls
- * `LlmInference.createFromOptions(...)` and `generateResponseAsync(...)`. Until the
- * .task file is dropped in, this returns a deterministic stub so the pipeline is
- * runnable end-to-end.
+ * Path B — on-device LLM engine. Primary model: Gemma 3 4B Q4 (`.task`) via MediaPipe
+ * LLM Inference API. Falls back to a deterministic stub when the `.task` file is
+ * missing so the pipeline is still runnable end-to-end for integration testing.
  */
 class LocalLlmEngine(
     private val context: Context,
     private val modelPath: String = "/data/local/tmp/gemma3_4b_q4.task",
     private val maxTokens: Int = 1024,
     private val temperature: Float = 0.8f,
+    private val topK: Int = 40,
+    private val randomSeed: Int = 101,
 ) : Closeable {
 
-    private val modelAvailable: Boolean = java.io.File(modelPath).exists()
+    private val llm: LlmInference? = runCatching {
+        if (!File(modelPath).exists()) return@runCatching null
+        val options = LlmInference.LlmInferenceOptions.builder()
+            .setModelPath(modelPath)
+            .setMaxTokens(maxTokens)
+            .setTopK(topK)
+            .setTemperature(temperature)
+            .setRandomSeed(randomSeed)
+            .build()
+        LlmInference.createFromOptions(context, options)
+    }.onFailure { Log.w(TAG, "LocalLlmEngine failed to init: ${it.message}") }.getOrNull()
 
     suspend fun generate(prompt: String): String {
-        if (modelAvailable) {
-            // TODO: construct LlmInferenceOptions(modelPath, maxTokens, topK=40,
-            //  temperature, randomSeed), create LlmInference, call
-            //  generateResponseAsync and collect partials into a single string.
-            return stub(prompt)
-        }
-        return stub(prompt)
+        val engine = llm ?: return stub(prompt)
+        return runCatching { invoke(engine, prompt) }
+            .onFailure { Log.w(TAG, "generate() failed; using stub", it) }
+            .getOrDefault(stub(prompt))
     }
+
+    private suspend fun invoke(engine: LlmInference, prompt: String): String =
+        suspendCancellableCoroutine { cont ->
+            val sb = StringBuilder()
+            engine.generateResponseAsync(prompt) { partial, done ->
+                sb.append(partial)
+                if (done) cont.resume(sb.toString())
+            }
+        }
 
     private fun stub(prompt: String): String =
         "[local-llm placeholder] ${prompt.take(120)}"
 
-    override fun close() { /* no-op until LlmInference is wired */ }
+    override fun close() {
+        runCatching { llm?.close() }
+    }
+
+    companion object {
+        private const val TAG = "LocalLlmEngine"
+    }
 }

@@ -1,16 +1,19 @@
 package com.example.privacyrouter.pipeline.stage1
 
+import com.example.privacyrouter.execution.FunctionGemmaEngine
 import com.example.privacyrouter.model.ClassificationResult
 import com.example.privacyrouter.model.RequestLabel
 
 /**
- * Two-tier classifier orchestrator. Tier 0 regex → Tier 1 MobileBERT. When Tier 1
- * confidence falls below [MobileBertClassifier.CONFIDENCE_THRESHOLD] the label is
- * downgraded to AMBIGUOUS, which the pipeline may resolve via a FunctionGemma Tier 2
- * fallback (wired in step e).
+ * Three-tier classifier orchestrator:
+ *   Tier 0 — regex pre-filter (< 1 ms)
+ *   Tier 1 — MobileBERT fine-tuned classifier (10–20 ms on NNAPI)
+ *   Tier 2 — FunctionGemma fallback, invoked only when Tier 1 confidence is below
+ *            [MobileBertClassifier.CONFIDENCE_THRESHOLD]
  */
 class RequestClassifier(
     private val mobileBert: MobileBertClassifier,
+    private val functionGemma: FunctionGemmaEngine? = null,
 ) {
     fun classify(query: String): ClassificationResult {
         RegexPreFilter.match(query)?.let { label ->
@@ -18,12 +21,30 @@ class RequestClassifier(
             return ClassificationResult(guarded, confidence = 0.99f, tierId = 0)
         }
 
-        val result = mobileBert.classify(query)
-        val guarded = ContactSensitivityGuard.guard(query, result.label)
-        return if (result.confidence < MobileBertClassifier.CONFIDENCE_THRESHOLD) {
-            ClassificationResult(RequestLabel.AMBIGUOUS, result.confidence, result.tierId)
-        } else {
-            result.copy(label = guarded)
+        val tier1 = mobileBert.classify(query)
+        if (tier1.confidence >= MobileBertClassifier.CONFIDENCE_THRESHOLD) {
+            return tier1.copy(label = ContactSensitivityGuard.guard(query, tier1.label))
         }
+
+        val fallback = functionGemma?.classifyRequest(query)?.let { call ->
+            val category = call.args["category"] as? String
+            val confidence = (call.args["confidence"] as? Number)?.toFloat() ?: tier1.confidence
+            val label = runCatching { RequestLabel.valueOf(category.orEmpty()) }
+                .getOrDefault(RequestLabel.AMBIGUOUS)
+            ClassificationResult(
+                label = ContactSensitivityGuard.guard(query, label),
+                confidence = confidence,
+                tierId = TIER_2,
+            )
+        }
+        return fallback ?: ClassificationResult(
+            label = RequestLabel.AMBIGUOUS,
+            confidence = tier1.confidence,
+            tierId = tier1.tierId,
+        )
+    }
+
+    companion object {
+        const val TIER_2: Int = 2
     }
 }

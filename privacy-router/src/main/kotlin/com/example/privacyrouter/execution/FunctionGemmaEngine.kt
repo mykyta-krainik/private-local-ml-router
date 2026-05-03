@@ -1,45 +1,84 @@
 package com.example.privacyrouter.execution
 
 import android.content.Context
+import android.util.Log
+import com.google.mediapipe.tasks.genai.llminference.LlmInference
+import com.squareup.moshi.Moshi
+import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
 import java.io.Closeable
+import java.io.File
 
 /**
- * FunctionGemma 270M engine. Placeholder — the real engine loads a fine-tuned
- * Gemma 3 270M LiteRT .task file via the MediaPipe/LiteRT GenAI API and returns
- * structured JSON function calls. Until the asset is dropped in, this parses a
- * trivial keyword heuristic so Path A still produces plausible FunctionCalls.
+ * FunctionGemma 270M engine. Loads a fine-tuned Gemma 3 270M `.task` file via the
+ * MediaPipe LLM Inference API (same runtime as the main local LLM; FunctionGemma is
+ * just a smaller fine-tune prompted to emit JSON function calls). Falls back to a
+ * regex heuristic when the `.task` file is missing.
  */
 class FunctionGemmaEngine(
     private val context: Context,
-    private val modelAssetPath: String = "function_gemma_270m.task",
+    private val modelPath: String = "/data/local/tmp/function_gemma_270m.task",
+    private val maxTokens: Int = 256,
+    private val temperature: Float = 0.1f,
+    private val topK: Int = 1,
 ) : Closeable {
 
-    private val modelAvailable: Boolean = runCatching {
-        context.assets.open(modelAssetPath).use { true }
-    }.getOrDefault(false)
+    private val moshi = Moshi.Builder().add(KotlinJsonAdapterFactory()).build()
+    private val mapAdapter = moshi.adapter(
+        com.squareup.moshi.Types.newParameterizedType(
+            Map::class.java, String::class.java, Any::class.java,
+        ),
+    )
 
-    fun resolveAction(query: String): FunctionCall {
-        if (modelAvailable) {
-            // TODO: invoke LiteRT GenAI runner, parse JSON output, build FunctionCall.
-            return heuristic(query)
-        }
-        return heuristic(query)
+    private val llm: LlmInference? = runCatching {
+        if (!File(modelPath).exists()) return@runCatching null
+        val options = LlmInference.LlmInferenceOptions.builder()
+            .setModelPath(modelPath)
+            .setMaxTokens(maxTokens)
+            .setTopK(topK)
+            .setTemperature(temperature)
+            .build()
+        LlmInference.createFromOptions(context, options)
+    }.onFailure { Log.w(TAG, "FunctionGemmaEngine failed to init: ${it.message}") }.getOrNull()
+
+    fun resolveAction(query: String): FunctionCall =
+        llm?.let { runCatching { invokeAction(it, query) }.getOrNull() }
+            ?: heuristic(query)
+
+    fun classifyRequest(query: String): FunctionCall =
+        llm?.let { runCatching { invokeClassify(it, query) }.getOrNull() }
+            ?: FunctionCall(
+                function = "classify_request",
+                args = mapOf("category" to "AMBIGUOUS", "confidence" to 0.5f),
+            )
+
+    private fun invokeAction(engine: LlmInference, query: String): FunctionCall {
+        val prompt = ACTION_PROMPT.replace("{{QUERY}}", query)
+        val raw = engine.generateResponse(prompt)
+        return parseFunctionCall(raw)
     }
 
-    /**
-     * Used by Stage 1 Tier 2 fallback when MobileBERT confidence is below threshold.
-     * Returns a [FunctionCall] whose "function" is "classify_request" and whose args
-     * contain `category`, `confidence`, `reasoning` keys.
-     */
-    fun classifyRequest(query: String): FunctionCall =
-        FunctionCall(
-            function = "classify_request",
-            args = mapOf(
-                "category" to "AMBIGUOUS",
-                "confidence" to 0.5f,
-                "reasoning" to "placeholder — awaiting fine-tuned FunctionGemma asset",
-            ),
-        )
+    private fun invokeClassify(engine: LlmInference, query: String): FunctionCall {
+        val prompt = CLASSIFY_PROMPT.replace("{{QUERY}}", query)
+        val raw = engine.generateResponse(prompt)
+        return parseFunctionCall(raw)
+    }
+
+    @Suppress("UNCHECKED_CAST")
+    private fun parseFunctionCall(raw: String): FunctionCall {
+        val firstBrace = raw.indexOf('{')
+        val lastBrace = raw.lastIndexOf('}')
+        if (firstBrace < 0 || lastBrace <= firstBrace) {
+            return FunctionCall("unknown", mapOf("raw" to raw))
+        }
+        val json = raw.substring(firstBrace, lastBrace + 1)
+        val parsed = mapAdapter.fromJson(json) as? Map<String, Any?>
+            ?: return FunctionCall("unknown", mapOf("raw" to raw))
+        val function = (parsed["function"] as? String) ?: "unknown"
+        val args = (parsed["parameters"] as? Map<String, Any?>)
+            ?: (parsed["args"] as? Map<String, Any?>)
+            ?: emptyMap()
+        return FunctionCall(function, args)
+    }
 
     private fun heuristic(query: String): FunctionCall {
         val q = query.lowercase()
@@ -77,5 +116,19 @@ class FunctionGemmaEngine(
         )
     }
 
-    override fun close() { /* no-op until runner is wired */ }
+    override fun close() {
+        runCatching { llm?.close() }
+    }
+
+    companion object {
+        private const val TAG = "FunctionGemmaEngine"
+
+        private const val ACTION_PROMPT = """You are an Android on-device function-calling model. Emit a single JSON object with "function" and "parameters" keys. Supported functions: create_calendar_event, set_alarm, set_timer, make_phone_call, send_sms, toggle_flashlight.
+Query: {{QUERY}}
+JSON:"""
+
+        private const val CLASSIFY_PROMPT = """You classify user queries into categories: DEVICE_ACTION, PERSONAL_QUERY, FACTUAL_QUERY, CONVERSATIONAL, AMBIGUOUS. Emit a single JSON object with keys "function"="classify_request" and "parameters" containing "category", "confidence" (0..1), and "reasoning".
+Query: {{QUERY}}
+JSON:"""
+    }
 }

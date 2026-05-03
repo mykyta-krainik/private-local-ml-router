@@ -109,15 +109,16 @@ class PrivacyRouterPipeline(
             policy: PolicyConfig = PolicyConfig.default(),
         ): PrivacyRouterPipeline {
             val appCtx = context.applicationContext
+            val fgEngine = FunctionGemmaEngine(appCtx)
             return PrivacyRouterPipeline(
-                classifier = RequestClassifier(MobileBertClassifier(appCtx)),
+                classifier = RequestClassifier(MobileBertClassifier(appCtx), fgEngine),
                 piiOrchestrator = PiiDetectionOrchestrator(
                     tier0 = TextClassifierDetector(appCtx),
                     tier1 = NerModelDetector(appCtx),
                 ),
                 policyEngine = PolicyEngine(policy),
                 redactor = PiiRedactor(),
-                functionGemma = FunctionGemmaEngine(appCtx),
+                functionGemma = fgEngine,
                 actionExecutor = ActionExecutor(appCtx),
                 localLlm = LocalLlmEngine(appCtx),
                 cloud = cloud,
