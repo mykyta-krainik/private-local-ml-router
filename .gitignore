@@ -2,6 +2,8 @@
 .idea/
 .vscode/
 .DS_Store
+.agents/
+skills-lock.json
 build/
 gradle.properties
 local.properties
@@ -12,3 +14,4 @@ local.properties
 *.jar
 *.war
 *.ear
+.tool-versions
