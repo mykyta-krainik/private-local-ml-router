@@ -23,7 +23,7 @@ class FunctionGemmaEngine(
 ) : Closeable {
 
     private val moshi = Moshi.Builder().add(KotlinJsonAdapterFactory()).build()
-    private val mapAdapter = moshi.adapter(
+    private val mapAdapter = moshi.adapter<Map<String, Any?>>(
         com.squareup.moshi.Types.newParameterizedType(
             Map::class.java, String::class.java, Any::class.java,
         ),

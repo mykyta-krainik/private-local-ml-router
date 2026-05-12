@@ -3,10 +3,10 @@ package com.example.privacyrouter.execution
 import android.content.Context
 import android.util.Log
 import com.google.mediapipe.tasks.genai.llminference.LlmInference
-import kotlinx.coroutines.suspendCancellableCoroutine
 import java.io.Closeable
 import java.io.File
-import kotlin.coroutines.resume
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 /**
  * Path B — on-device LLM engine. Primary model: Gemma 3 4B Q4 (`.task`) via MediaPipe
@@ -42,12 +42,8 @@ class LocalLlmEngine(
     }
 
     private suspend fun invoke(engine: LlmInference, prompt: String): String =
-        suspendCancellableCoroutine { cont ->
-            val sb = StringBuilder()
-            engine.generateResponseAsync(prompt) { partial, done ->
-                sb.append(partial)
-                if (done) cont.resume(sb.toString())
-            }
+        withContext(Dispatchers.IO) {
+            engine.generateResponse(prompt)
         }
 
     private fun stub(prompt: String): String =
