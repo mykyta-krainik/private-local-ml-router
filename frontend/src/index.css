@@ -1,0 +1,45 @@
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: system-ui, -apple-system, sans-serif;
+  background: #0f1117;
+  color: #e2e8f0;
+  min-height: 100vh;
+}
+
+button {
+  cursor: pointer;
+  border: none;
+  border-radius: 6px;
+  padding: 10px 24px;
+  font-size: 15px;
+  font-weight: 600;
+  background: #3b82f6;
+  color: #fff;
+  transition: background 0.15s;
+}
+button:hover:not(:disabled) { background: #2563eb; }
+button:disabled { opacity: 0.45; cursor: not-allowed; }
+
+textarea {
+  width: 100%;
+  background: #1e2130;
+  border: 1px solid #2d3348;
+  border-radius: 8px;
+  color: #e2e8f0;
+  font-size: 15px;
+  padding: 12px;
+  resize: vertical;
+  outline: none;
+  transition: border-color 0.15s;
+}
+textarea:focus { border-color: #3b82f6; }
+
+pre {
+  background: #1e2130;
+  border-radius: 8px;
+  padding: 16px;
+  overflow: auto;
+  font-size: 13px;
+  color: #a5b4fc;
+}

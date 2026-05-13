@@ -10,9 +10,85 @@ PII and a user policy.
 
 ---
 
+## Local demo (no Android required)
+
+The `demo-server/` module re-implements the pipeline on a plain JVM with JVM-compatible
+stubs (no TFLite, no MediaPipe, no Android SDK). A React frontend visualises each
+pipeline stage interactively.
+
+### Quick start — Docker Compose (recommended, no local installs required)
+
+```bash
+make up
+# or: docker compose up --build
+```
+
+This starts four services in order:
+
+1. **ollama** — Ollama daemon (port 11434)
+2. **ollama-pull** — pulls `gemma2:4b` (~2.4 GB) on first run, then exits
+3. **server** — Ktor API (port 8080), waits for Ollama to be healthy
+4. **frontend** — Vite dev server (port 5173) with hot reload via volume mount
+
+Open `http://localhost:5173` and type a query. No Ollama, npm, or JDK needed locally.
+
+```bash
+make logs   # follow all service logs
+make down   # stop and remove containers
+```
+
+### Quick start — local (requires JDK 17 + npm)
+
+```bash
+# Terminal 1: API server (port 8080)
+make server
+
+# Terminal 2: React frontend (port 5173)
+make frontend
+```
+
+Path B (local LLM) returns a stub response unless Ollama is running separately.
+
+### Environment variables (server-side only)
+
+| Variable         | Default                  | Purpose                  |
+|------------------|--------------------------|--------------------------|
+| `OLLAMA_URL`     | `http://localhost:11434` | Ollama base URL          |
+| `OLLAMA_MODEL`   | `gemma2:4b`              | Model for Path B         |
+| `CLOUD_API_KEY`  | —                        | Enables Path C (cloud)   |
+| `CLOUD_API_URL`  | —                        | Cloud endpoint URL       |
+| `PORT`           | `8080`                   | Ktor listen port         |
+
+### Smoke-test the API directly
+
+```bash
+curl -s -X POST localhost:8080/api/process \
+  -H 'Content-Type: application/json' \
+  -d '{"text":"set a timer for 5 minutes"}' | jq .stages.stage3_routing.action
+# → "FUNCTION_GEMMA"
+
+curl -s -X POST localhost:8080/api/process \
+  -H 'Content-Type: application/json' \
+  -d '{"text":"my doctor prescribed medication for my anxiety"}' | jq .stages.stage3_routing.action
+# → "LOCAL"
+```
+
+### What the frontend shows
+
+Each request passes through four visible stages:
+
+```text
+[Stage 1: PERSONAL_QUERY 80%] → [Stage 2: 1 entity, 2 signals] → [Score: 0.93] → [🔴 LOCAL] → Response
+```
+
+Click any stage card to expand the detail: matched tier, entity table, score breakdown,
+rule that fired. Toggle **Show raw JSON** for the full API response.
+
+---
+
 ## What it does
 
-```
+```text
 voice / text input
        ↓
 [Stage 0]  capture transcript via SpeechRecognizer
@@ -36,19 +112,19 @@ FunctionGemma  Local LLM         Local LLM via         Cloud API
 device action  (Gemma 3 4B)      PII redactor          (raw query)
 ```
 
-| Stage 1 label     | Stage 2 mode   | Default routing                    |
-|-------------------|----------------|------------------------------------|
-| `DEVICE_ACTION`   | skipped        | Path A (FunctionGemma)             |
-| `PERSONAL_QUERY`  | full pipeline  | Path B (local LLM)                 |
-| `FACTUAL_QUERY`   | Tier 0 only    | Path C (cloud)                     |
-| `CONVERSATIONAL`  | Tier 0 + 1     | Path C, redacted if PII found      |
-| `AMBIGUOUS`       | full pipeline  | Path B / redact-then-cloud         |
+| Stage 1 label    | Stage 2 mode   | Default routing               |
+|------------------|----------------|-------------------------------|
+| `DEVICE_ACTION`  | skipped        | Path A (FunctionGemma)        |
+| `PERSONAL_QUERY` | full pipeline  | Path B (local LLM)            |
+| `FACTUAL_QUERY`  | Tier 0 only    | Path C (cloud)                |
+| `CONVERSATIONAL` | Tier 0 + 1     | Path C, redacted if PII found |
+| `AMBIGUOUS`      | full pipeline  | Path B / redact-then-cloud    |
 
 ---
 
 ## Module layout
 
-```
+```text
 privacy-router/
 ├── build.gradle.kts
 └── src/
@@ -125,12 +201,12 @@ heuristic so the pipeline stays runnable end-to-end. To activate real inference,
 the files into `privacy-router/src/main/assets/` (or, for the LLMs, into
 `/data/local/tmp/` on device):
 
-| Engine                                | Asset path                                 | How to produce                                                        |
-|---------------------------------------|--------------------------------------------|-----------------------------------------------------------------------|
-| Stage 1 — `MobileBertClassifier`      | `assets/mobilbert_classifier.tflite` + `assets/mobilbert_vocab.txt` | Fine-tune MobileBERT on remapped CLINC150 → 5 labels, export to TFLite int8 |
-| Stage 2 — `NerModelDetector`          | `assets/ner_model.tflite` + `assets/ner_vocab.txt`                  | Convert `dslim/bert-base-NER` to ONNX → TFLite int8                   |
-| Path A — `FunctionGemmaEngine`        | `/data/local/tmp/function_gemma_270m.task`                          | LoRA fine-tune Gemma 3 270M on Mobile Actions → export to LiteRT      |
-| Path B — `LocalLlmEngine`             | `/data/local/tmp/gemma3_4b_q4.task`                                 | Download Gemma 3 4B Q4 `.task` file from Google                       |
+| Engine                           | Asset path                                  | How to produce                                                   |
+|----------------------------------|---------------------------------------------|------------------------------------------------------------------|
+| Stage 1 — `MobileBertClassifier` | `mobilbert_classifier.tflite` + vocab file  | Fine-tune MobileBERT on CLINC150 → 5 labels, export to TFLite    |
+| Stage 2 — `NerModelDetector`     | `ner_model.tflite` + vocab file             | Convert `dslim/bert-base-NER` to ONNX → TFLite int8              |
+| Path A — `FunctionGemmaEngine`   | `function_gemma_270m.task` (on-device path) | LoRA fine-tune Gemma 3 270M on Mobile Actions → export to LiteRT |
+| Path B — `LocalLlmEngine`        | `gemma3_4b_q4.task` (on-device path)        | Download Gemma 3 4B Q4 `.task` file from Google                  |
 
 The `LABELS` array in [`MobileBertClassifier`](privacy-router/src/main/kotlin/com/example/privacyrouter/pipeline/stage1/MobileBertClassifier.kt)
 and the `TAGS` array in [`NerModelDetector`](privacy-router/src/main/kotlin/com/example/privacyrouter/pipeline/stage2/NerModelDetector.kt)
