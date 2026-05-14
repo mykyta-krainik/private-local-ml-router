@@ -2,6 +2,7 @@ package com.example.privacyrouter.execution
 
 import android.content.Context
 import android.util.Log
+import com.example.privacyrouter.interfaces.LlmBackend
 import com.google.mediapipe.tasks.genai.llminference.LlmInference
 import java.io.Closeable
 import java.io.File
@@ -20,7 +21,7 @@ class LocalLlmEngine(
     private val temperature: Float = 0.8f,
     private val topK: Int = 40,
     private val randomSeed: Int = 101,
-) : Closeable {
+) : LlmBackend, Closeable {
 
     private val llm: LlmInference? = runCatching {
         if (!File(modelPath).exists()) return@runCatching null
@@ -34,7 +35,7 @@ class LocalLlmEngine(
         LlmInference.createFromOptions(context, options)
     }.onFailure { Log.w(TAG, "LocalLlmEngine failed to init: ${it.message}") }.getOrNull()
 
-    suspend fun generate(prompt: String): String {
+    override suspend fun generate(prompt: String): String {
         val engine = llm ?: return stub(prompt)
         return runCatching { invoke(engine, prompt) }
             .onFailure { Log.w(TAG, "generate() failed; using stub", it) }

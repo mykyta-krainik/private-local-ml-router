@@ -2,6 +2,7 @@ package com.example.privacyrouter.execution
 
 import android.content.Context
 import android.util.Log
+import com.example.privacyrouter.interfaces.FunctionCallingBackend
 import com.google.mediapipe.tasks.genai.llminference.LlmInference
 import com.squareup.moshi.Moshi
 import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
@@ -20,7 +21,7 @@ class FunctionGemmaEngine(
     private val maxTokens: Int = 256,
     private val temperature: Float = 0.1f,
     private val topK: Int = 1,
-) : Closeable {
+) : FunctionCallingBackend, Closeable {
 
     private val moshi = Moshi.Builder().add(KotlinJsonAdapterFactory()).build()
     private val mapAdapter = moshi.adapter<Map<String, Any?>>(
@@ -40,11 +41,11 @@ class FunctionGemmaEngine(
         LlmInference.createFromOptions(context, options)
     }.onFailure { Log.w(TAG, "FunctionGemmaEngine failed to init: ${it.message}") }.getOrNull()
 
-    fun resolveAction(query: String): FunctionCall =
+    override suspend fun resolveAction(query: String): FunctionCall =
         llm?.let { runCatching { invokeAction(it, query) }.getOrNull() }
             ?: heuristic(query)
 
-    fun classifyRequest(query: String): FunctionCall =
+    override suspend fun classifyRequest(query: String): FunctionCall =
         llm?.let { runCatching { invokeClassify(it, query) }.getOrNull() }
             ?: FunctionCall(
                 function = "classify_request",

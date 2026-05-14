@@ -1,29 +1,22 @@
 package com.example.privacyrouter.pipeline.stage1
 
-import com.example.privacyrouter.model.ClassificationResult
+import com.example.privacyrouter.interfaces.RequestClassifierBackend
 import com.example.privacyrouter.model.RequestLabel
 
 /** JVM stub — keyword heuristic replacing the Android TFLite/NNAPI classifier. */
-class MobileBertClassifier {
+class MobileBertClassifier : RequestClassifierBackend {
 
-    fun classify(query: String): ClassificationResult {
-        val q = query.lowercase()
+    override suspend fun classify(text: String): Pair<RequestLabel, Float> {
+        val q = text.lowercase()
         return when {
-            personalKeywords.any { q.contains(it) } ->
-                ClassificationResult(RequestLabel.PERSONAL_QUERY, 0.80f, TIER_ID)
-            factualKeywords.any { q.contains(it) } ->
-                ClassificationResult(RequestLabel.FACTUAL_QUERY, 0.78f, TIER_ID)
-            conversationalKeywords.any { q.contains(it) } ->
-                ClassificationResult(RequestLabel.CONVERSATIONAL, 0.72f, TIER_ID)
-            else ->
-                ClassificationResult(RequestLabel.AMBIGUOUS, 0.50f, TIER_ID)
+            personalKeywords.any { q.contains(it) } -> RequestLabel.PERSONAL_QUERY to 0.80f
+            factualKeywords.any { q.contains(it) } -> RequestLabel.FACTUAL_QUERY to 0.78f
+            conversationalKeywords.any { q.contains(it) } -> RequestLabel.CONVERSATIONAL to 0.72f
+            else -> RequestLabel.AMBIGUOUS to 0.50f
         }
     }
 
     companion object {
-        const val TIER_ID: Int = 1
-        const val CONFIDENCE_THRESHOLD: Float = 0.75f
-
         private val personalKeywords = listOf(
             "my doctor", "my therapist", "my bank", "my balance",
             "my medication", "my prescription", "i feel", "symptoms",

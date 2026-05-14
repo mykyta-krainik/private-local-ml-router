@@ -29,11 +29,6 @@ data class PipelineResult(
     val totalLatencyMs: Long,
 )
 
-/**
- * Orchestrates all four stages and dispatches to the chosen execution path. Instances
- * should be warmed up once in [com.example.privacyrouter.PrivacyRouterVoiceService.onCreate]
- * to avoid cold-start latency on the first user request.
- */
 class PrivacyRouterPipeline(
     private val classifier: RequestClassifier,
     private val piiOrchestrator: PiiDetectionOrchestrator,
@@ -66,15 +61,12 @@ class PrivacyRouterPipeline(
             }
             RoutingAction.LOCAL -> ExecutionResult.Text(localLlm.generate(query))
             RoutingAction.REDACT_THEN_CLOUD -> {
-                val c = cloud ?: return errorResult(input, classification, routing, startedAt,
-                    "cloud client not configured")
+                val c = cloud ?: return errorResult(input, classification, routing, startedAt, "cloud client not configured")
                 val redacted = redactor.redact(query, pii.entities)
-                val reply = c.complete(redacted.redacted)
-                ExecutionResult.Text(redactor.restore(reply, redacted.mapping))
+                ExecutionResult.Text(redactor.restore(c.complete(redacted.redacted), redacted.mapping))
             }
             RoutingAction.CLOUD -> {
-                val c = cloud ?: return errorResult(input, classification, routing, startedAt,
-                    "cloud client not configured")
+                val c = cloud ?: return errorResult(input, classification, routing, startedAt, "cloud client not configured")
                 ExecutionResult.Text(c.complete(query))
             }
         }
@@ -94,13 +86,7 @@ class PrivacyRouterPipeline(
         routing: RoutingDecision,
         startedAt: Long,
         message: String,
-    ) = PipelineResult(
-        input = input,
-        classification = classification,
-        routing = routing,
-        execution = ExecutionResult.Error(message),
-        totalLatencyMs = System.currentTimeMillis() - startedAt,
-    )
+    ) = PipelineResult(input, classification, routing, ExecutionResult.Error(message), System.currentTimeMillis() - startedAt)
 
     companion object {
         fun build(

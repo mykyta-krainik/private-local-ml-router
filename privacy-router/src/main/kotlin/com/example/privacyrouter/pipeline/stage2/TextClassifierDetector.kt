@@ -6,6 +6,7 @@ import android.view.textclassifier.TextClassificationManager
 import android.view.textclassifier.TextClassifier
 import android.view.textclassifier.TextLinks
 import androidx.annotation.RequiresApi
+import com.example.privacyrouter.interfaces.TextClassifierBackend
 import com.example.privacyrouter.model.DetectionTier
 import com.example.privacyrouter.model.PiiEntity
 import com.example.privacyrouter.model.PiiType
@@ -14,7 +15,7 @@ import com.example.privacyrouter.model.PiiType
  * Tier 0 PII detector. Delegates to Android's system TextClassifier which natively
  * recognizes addresses, phone numbers, emails, URLs, and date-time expressions.
  */
-class TextClassifierDetector(private val context: Context) {
+class TextClassifierDetector(private val context: Context) : TextClassifierBackend {
 
     private val classifier: TextClassifier? by lazy {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
@@ -23,7 +24,9 @@ class TextClassifierDetector(private val context: Context) {
         } else null
     }
 
-    fun detect(query: String): List<PiiEntity> {
+    override suspend fun detect(text: String): List<PiiEntity> = detectSync(text)
+
+    fun detectSync(query: String): List<PiiEntity> {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P) return emptyList()
         return detectApi28(query)
     }

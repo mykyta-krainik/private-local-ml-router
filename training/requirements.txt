@@ -1,0 +1,11 @@
+torch>=2.2.0
+transformers>=4.40.0
+datasets>=2.19.0
+optimum[exporters-tf]>=1.19.0
+ultralytics>=8.2.0
+tensorflow>=2.15.0
+roboflow>=1.1.0
+faker>=24.0.0
+seqeval>=1.2.2
+scikit-learn>=1.4.0
+onnxruntime>=1.17.0

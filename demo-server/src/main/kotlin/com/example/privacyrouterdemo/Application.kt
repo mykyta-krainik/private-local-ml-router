@@ -1,5 +1,6 @@
 package com.example.privacyrouterdemo
 
+import com.example.privacyrouterdemo.api.metricsRoute
 import com.example.privacyrouterdemo.api.processRoute
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpMethod
@@ -21,12 +22,14 @@ fun main() {
         }
         install(CORS) {
             allowMethod(HttpMethod.Options)
+            allowMethod(HttpMethod.Get)
             allowMethod(HttpMethod.Post)
             allowHeader(HttpHeaders.ContentType)
             anyHost()
         }
         routing {
             processRoute(pipeline)
+            metricsRoute(pipeline)
         }
     }.start(wait = true)
 }

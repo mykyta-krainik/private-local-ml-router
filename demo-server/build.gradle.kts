@@ -18,6 +18,8 @@ application {
 val ktorVersion = "2.3.12"
 
 dependencies {
+    implementation(project(":core"))
+
     // Ktor server
     implementation("io.ktor:ktor-server-netty:$ktorVersion")
     implementation("io.ktor:ktor-server-core:$ktorVersion")
@@ -26,7 +28,10 @@ dependencies {
     implementation("io.ktor:ktor-server-cors:$ktorVersion")
     implementation("io.ktor:ktor-server-call-logging:$ktorVersion")
 
-    // HTTP client (Path C cloud + Ollama)
+    // Multipart (visual endpoint)
+    implementation("io.ktor:ktor-server-partial-content:$ktorVersion")
+
+    // HTTP client (Path C cloud + Ollama + visual stub)
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
 
     // Policy JSON loader

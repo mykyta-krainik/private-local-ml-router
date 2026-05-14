@@ -4,7 +4,7 @@ import android.content.Context
 import android.util.Log
 import com.example.privacyrouter.ml.TfLiteLoader
 import com.example.privacyrouter.ml.WordPieceTokenizer
-import com.example.privacyrouter.model.ClassificationResult
+import com.example.privacyrouter.interfaces.RequestClassifierBackend
 import com.example.privacyrouter.model.RequestLabel
 import org.tensorflow.lite.Interpreter
 import org.tensorflow.lite.nnapi.NnApiDelegate
@@ -27,7 +27,7 @@ class MobileBertClassifier(
     private val modelAssetPath: String = "mobilbert_classifier.tflite",
     private val vocabAssetPath: String = "mobilbert_vocab.txt",
     private val seqLen: Int = 64,
-) : Closeable {
+) : RequestClassifierBackend, Closeable {
 
     private val nnApiDelegate: NnApiDelegate? by lazy {
         runCatching { NnApiDelegate() }.getOrNull()
@@ -49,7 +49,12 @@ class MobileBertClassifier(
         tokenizer = built.getOrNull()?.second
     }
 
-    fun classify(query: String): ClassificationResult {
+    override suspend fun classify(text: String): Pair<RequestLabel, Float> {
+        val result = classifyInternal(text)
+        return result.label to result.confidence
+    }
+
+    fun classifyInternal(query: String): com.example.privacyrouter.model.ClassificationResult {
         val engine = interpreter
         val tok = tokenizer
         if (engine != null && tok != null) {
@@ -61,6 +66,17 @@ class MobileBertClassifier(
         }
         return heuristic(query)
     }
+
+    private fun heuristic(query: String) = com.example.privacyrouter.model.ClassificationResult(
+        label = when {
+            personalKeywords.any { query.lowercase().contains(it) } -> RequestLabel.PERSONAL_QUERY
+            factualKeywords.any { query.lowercase().contains(it) } -> RequestLabel.FACTUAL_QUERY
+            conversationalKeywords.any { query.lowercase().contains(it) } -> RequestLabel.CONVERSATIONAL
+            else -> RequestLabel.AMBIGUOUS
+        },
+        confidence = 0.50f,
+        tierId = TIER_ID,
+    )
 
     private fun runInference(
         engine: Interpreter,
@@ -90,19 +106,6 @@ class MobileBertClassifier(
         return FloatArray(logits.size) { exps[it] / sum }
     }
 
-    private fun heuristic(query: String): ClassificationResult {
-        val q = query.lowercase()
-        return when {
-            personalKeywords.any { q.contains(it) } ->
-                ClassificationResult(RequestLabel.PERSONAL_QUERY, 0.80f, TIER_ID)
-            factualKeywords.any { q.contains(it) } ->
-                ClassificationResult(RequestLabel.FACTUAL_QUERY, 0.78f, TIER_ID)
-            conversationalKeywords.any { q.contains(it) } ->
-                ClassificationResult(RequestLabel.CONVERSATIONAL, 0.72f, TIER_ID)
-            else ->
-                ClassificationResult(RequestLabel.AMBIGUOUS, 0.50f, TIER_ID)
-        }
-    }
 
     override fun close() {
         interpreter?.close()

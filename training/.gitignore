@@ -1,0 +1,6 @@
+datasets/
+outputs/
+tflite_exports/
+__pycache__/
+*.pyc
+runs/

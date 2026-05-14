@@ -4,6 +4,7 @@ import android.content.Context
 import android.util.Log
 import com.example.privacyrouter.ml.TfLiteLoader
 import com.example.privacyrouter.ml.WordPieceTokenizer
+import com.example.privacyrouter.interfaces.NerDetectorBackend
 import com.example.privacyrouter.model.DetectionTier
 import com.example.privacyrouter.model.PiiEntity
 import com.example.privacyrouter.model.PiiType
@@ -26,7 +27,7 @@ class NerModelDetector(
     private val modelAssetPath: String = "ner_model.tflite",
     private val vocabAssetPath: String = "ner_vocab.txt",
     private val seqLen: Int = 128,
-) : Closeable {
+) : NerDetectorBackend, Closeable {
 
     private val nnApiDelegate: NnApiDelegate? by lazy {
         runCatching { NnApiDelegate() }.getOrNull()
@@ -48,7 +49,9 @@ class NerModelDetector(
         tokenizer = built.getOrNull()?.second
     }
 
-    fun detect(query: String): List<PiiEntity> {
+    override suspend fun detect(text: String): List<PiiEntity> = detectSync(text)
+
+    fun detectSync(query: String): List<PiiEntity> {
         val modelEntities = interpreter?.let { engine ->
             tokenizer?.let { tok ->
                 runCatching { runInference(engine, tok, query) }

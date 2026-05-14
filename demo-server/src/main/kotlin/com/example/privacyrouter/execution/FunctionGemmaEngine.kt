@@ -1,14 +1,20 @@
 package com.example.privacyrouter.execution
 
+import com.example.privacyrouter.interfaces.FunctionCallingBackend
+import com.example.privacyrouter.model.RequestLabel
+
 /** JVM stub — regex heuristic replacing the MediaPipe FunctionGemma 270M engine. */
-class FunctionGemmaEngine {
+class FunctionGemmaEngine : FunctionCallingBackend {
 
-    fun resolveAction(query: String): FunctionCall = heuristic(query)
+    override suspend fun resolveAction(query: String): FunctionCall = heuristic(query)
 
-    fun classifyRequest(query: String): FunctionCall = FunctionCall(
+    override suspend fun classifyRequest(query: String): FunctionCall = FunctionCall(
         function = "classify_request",
-        args = mapOf("category" to "AMBIGUOUS", "confidence" to 0.5f,
-            "reasoning" to "JVM stub — FunctionGemma not available without MediaPipe"),
+        args = mapOf(
+            "category" to RequestLabel.AMBIGUOUS.name,
+            "confidence" to 0.5f,
+            "reasoning" to "JVM stub — FunctionGemma not available without MediaPipe",
+        ),
     )
 
     private fun heuristic(query: String): FunctionCall {

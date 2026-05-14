@@ -1,5 +1,6 @@
 package com.example.privacyrouter.execution
 
+import com.example.privacyrouter.interfaces.LlmBackend
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
@@ -8,15 +9,11 @@ import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import java.util.concurrent.TimeUnit
 
-/**
- * JVM Path B engine. Calls an Ollama-compatible OpenAI chat/completions endpoint.
- * Set OLLAMA_URL (default http://localhost:11434) and OLLAMA_MODEL (default gemma2:4b).
- * Returns a stub string if the endpoint is unreachable.
- */
+/** JVM Path B engine — calls an Ollama-compatible OpenAI chat/completions endpoint. */
 class LocalLlmEngine(
     private val ollamaUrl: String = System.getenv("OLLAMA_URL") ?: "http://localhost:11434",
     private val model: String = System.getenv("OLLAMA_MODEL") ?: "gemma2:4b",
-) {
+) : LlmBackend {
     private val client = OkHttpClient.Builder()
         .connectTimeout(5, TimeUnit.SECONDS)
         .readTimeout(120, TimeUnit.SECONDS)
@@ -24,7 +21,7 @@ class LocalLlmEngine(
 
     private val json = "application/json; charset=utf-8".toMediaType()
 
-    suspend fun generate(prompt: String): String = withContext(Dispatchers.IO) {
+    override suspend fun generate(prompt: String): String = withContext(Dispatchers.IO) {
         val body = """
             {"model":"$model","messages":[{"role":"user","content":${prompt.jsonString()}}],"stream":false}
         """.trimIndent().toRequestBody(json)
@@ -38,16 +35,13 @@ class LocalLlmEngine(
             client.newCall(request).execute().use { response ->
                 if (!response.isSuccessful) return@runCatching stub(prompt)
                 val raw = response.body?.string() ?: return@runCatching stub(prompt)
-                // Extract content from: {"choices":[{"message":{"content":"..."}}]}
                 Regex(""""content"\s*:\s*"((?:[^"\\]|\\.)*)"""")
-                    .find(raw)?.groupValues?.get(1)?.unescape()
-                    ?: stub(prompt)
+                    .find(raw)?.groupValues?.get(1)?.unescape() ?: stub(prompt)
             }
         }.getOrDefault(stub(prompt))
     }
 
-    private fun stub(prompt: String) =
-        "[local-llm stub — Ollama not reachable] ${prompt.take(100)}"
+    private fun stub(prompt: String) = "[local-llm stub — Ollama not reachable] ${prompt.take(100)}"
 
     private fun String.jsonString(): String = buildString(length + 2) {
         append('"')

@@ -33,12 +33,25 @@ android {
 }
 
 dependencies {
-    // MediaPipe LLM Inference (Path B — Gemma 3 4B)
+    implementation(project(":core"))
+
+    // MediaPipe LLM Inference (Path B — Gemma 3 4B + FunctionGemma 270M)
     implementation("com.google.mediapipe:tasks-genai:0.10.14")
 
-    // TFLite + NNAPI delegate (Stage 1 classifier, Stage 2 NER)
-    implementation("org.tensorflow:tensorflow-lite:2.14.0")
+    // TFLite + NNAPI delegate (Stage 1 classifier, Stage 2 NER, Stage 2B YOLO)
+    implementation("org.tensorflow:tensorflow-lite:2.16.1")
     implementation("org.tensorflow:tensorflow-lite-support:0.4.4")
+    implementation("org.tensorflow:tensorflow-lite-gpu:2.16.1")
+
+    // ML Kit — face detection (Stage 2B Tier 0)
+    implementation("com.google.android.gms:play-services-mlkit-face-detection:17.1.0")
+    // ML Kit — text recognition v2 / OCR bridge (Stage 2B Tier 0)
+    implementation("com.google.android.gms:play-services-mlkit-text-recognition:19.0.1")
+    // ML Kit — document scanner shape detection (Stage 2B Tier 0 pre-signal)
+    implementation("com.google.android.gms:play-services-mlkit-document-scanner:16.0.0-beta1")
+
+    // ONNX Runtime — Silero VAD (Stage 2B Tier 2 audio)
+    implementation("com.microsoft.onnxruntime:onnxruntime-android:1.18.0")
 
     // Kotlin coroutines
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")

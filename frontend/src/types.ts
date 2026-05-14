@@ -1,3 +1,9 @@
+export interface VisualEntity {
+  type: string
+  confidence: number
+  source: string
+}
+
 export interface ProcessResponse {
   stages: {
     stage1_classification: {
@@ -5,6 +11,8 @@ export interface ProcessResponse {
       tier: string
       label: string
       confidence: number
+      matchedPattern: string | null
+      classificationLatencyMs: number
     }
     stage2_piiDetection: {
       mode: string
@@ -12,12 +20,18 @@ export interface ProcessResponse {
       signals: string[]
       tiersUsed: string[]
       latencyMs: number
+      tier0EntityCount: number
+      tier1EntityCount: number
+      sharedEntityCount: number
+      visualEntityCount: number
+      visualEntities: VisualEntity[]
     }
     stage3_scoring: {
       entityScore: number
       signalBoost: number
       labelMultiplier: number
       finalScore: number
+      scoreZone: string
     }
     stage3_routing: {
       action: string
@@ -32,4 +46,5 @@ export interface ProcessResponse {
     }
   }
   totalLatencyMs: number
+  requestIndex: number
 }

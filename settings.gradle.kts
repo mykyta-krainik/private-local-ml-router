@@ -18,5 +18,6 @@ dependencyResolutionManagement {
 }
 
 rootProject.name = "privacy-router-root"
+include(":core")
 include(":privacy-router")
 include(":demo-server")
