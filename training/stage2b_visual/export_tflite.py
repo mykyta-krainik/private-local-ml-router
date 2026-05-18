@@ -12,10 +12,14 @@ Copy to Android assets:
   cp tflite_exports/yolov8n_pii.tflite ../privacy-router/src/main/assets/
 """
 
+import os
+import sys
 from pathlib import Path
 import shutil
 
-WEIGHTS = Path("runs/detect/yolov8n_pii/weights/best.pt")
+# Allow overriding the weights path via env var or CLI arg
+_default = Path("runs/detect/yolov8n_pii/weights/best.pt")
+WEIGHTS = Path(os.getenv("YOLO_WEIGHTS", sys.argv[1] if len(sys.argv) > 1 else str(_default)))
 EXPORT_DIR = Path("tflite_exports")
 EXPORT_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -23,6 +27,7 @@ EXPORT_DIR.mkdir(parents=True, exist_ok=True)
 def main():
     if not WEIGHTS.exists():
         print(f"Weights not found at {WEIGHTS} — run train_yolov8n.py first")
+        print(f"Tip: pass the path as an argument:  python export_tflite.py /path/to/best.pt")
         return
 
     from ultralytics import YOLO

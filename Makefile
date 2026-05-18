@@ -1,4 +1,8 @@
-.PHONY: up down logs server server-jar frontend dev test train-classifier train-ner train-visual
+.PHONY: up down logs server server-jar frontend dev test train-classifier train-ner train-visual vision-server
+
+# ── Load .env if present (keeps secrets out of shell history) ───────────────
+-include .env
+export
 
 # ── asdf Java shim (resolves .tool-versions; no-op if asdf is not installed) ─
 _ASDF_JAVA_VER := $(shell awk '/^java /{print $$2}' .tool-versions 2>/dev/null)
@@ -51,3 +55,6 @@ train-visual:
 	  python stage2b_visual/prepare_dataset.py && \
 	  python stage2b_visual/train_yolov8n.py && \
 	  python stage2b_visual/export_tflite.py
+
+vision-server:
+	cd vision-server && pip install -r requirements.txt && python app.py
